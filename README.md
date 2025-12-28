@@ -3,6 +3,6 @@ Code for generating the numerical results (including experiment and plotting scr
 
 # Files
 ## main.R
-Contain functions of first-order optimization algorithms (including gradient descent, Nesterov's accelerated gradient method, and the algorithms proposed in this paper) as well as objective functions.
+Contain objective functions and first-order optimization algorithms studied in this paper.
 ## simu.Rmd
 R Markdown file to conduct numerical experiments.
