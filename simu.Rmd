@@ -1,0 +1,408 @@
+---
+title: "NumExp"
+author: "Penghui Fu"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+library(here)
+knitr::opts_knit$set(root.dir = here())
+knitr::opts_chunk$set(collapse = TRUE, message = FALSE, tidy = TRUE, tidy.opts = list(width.cutoff=60), fig.align = 'center', fig.width = 8, fig.height = 6)
+```
+
+# Load packages and functions
+
+```{r}
+library('latex2exp')
+source('main.R')
+```
+
+# Strongly convex
+Setup experiments 
+
+```{r}
+idx <- 0
+# mu <- 0.5 # well-conditioned
+mu <- 5*10^(-3) # ill-conditioned
+s <- 0.1
+Num_iter <- 1000
+x0 <- c(1, 1)
+```
+
+Run algorithms
+
+```{r}
+#result_GD <- GD(idx=idx, x0=x0, s=s, MaxIter=Num_iter)
+c1.vec <- c(3)
+c2.vec <- seq(0.5, 3, by=0.5)
+result_SC <- list()
+lgd <- list() 
+i <- 1
+for(c1 in c1.vec){
+  for(c2 in c2.vec){
+    result_SC[[i]] <- list()
+    result_SC[[i]]$stepsize <- s
+    result_SC[[i]]$c1 <- c1
+    result_SC[[i]]$c2 <- c2
+    temp <- extSC(idx = idx, x0 = x0, s=s, mu=mu, c1=c1, c2=c2, MaxIter=Num_iter)
+    result_SC[[i]]$x <- temp$x
+    result_SC[[i]]$obj_track <- temp$obj_track
+    result_SC[[i]]$gradSq_track <- temp$gradSq_track
+    result_SC[[i]]$x_track <- temp$x_track
+    ##
+    lgd[[i]] <- bquote(c[1] == .(c1) ~ ", " ~ tilde(c)[2] == .(c2-0.5))
+    ##
+    i <- i + 1
+  }
+}
+lgd <- do.call(expression, lgd)
+# result_NAGSC <- NAGSC(idx = idx, x0 = x0, s=s, mu=mu, MaxIter=Num_iter)
+```
+
+Visualization
+
+```{r fig.cap = 'Optimality gap'}
+#pdf('strongly convex ill-conditioned-objective-s-0.5.pdf', width=8, height=6)
+#pdf('strongly convex well-conditioned-objective-s-0.15.pdf', width=8, height=6)
+#pdf('demo-sc.pdf',width=8, height=6)
+par(mar=c(5.1, 4.5, 4.1, 2.1))
+for(i in 1:length(result_SC)){
+  if(i == 1){
+    plot(log10(result_SC[[i]]$obj_track)~c(0:(Num_iter+1)), cex= 1, pch=i, type = 'l', ylab = '', xlab = '', col = i, ylim=c(-120,0), yaxt="n")
+    title(ylab = TeX('$f(x_k)-f^*$'), line = 3)
+    title(xlab = paste('Iteration ', TeX('$k$')), line = 2.5)
+    aty <- axTicks(2)
+    labels <- sapply(aty,function(i)
+      as.expression(bquote(10^ .(i)))
+    )
+    axis(2,las = 2,at=aty,labels=labels)
+  }else{
+    points(log10(result_SC[[i]]$obj_track)~c(0:(Num_iter+1)), cex=1, pch=i, type = 'l', col = i)
+  }
+}
+#points(log10(result_NAGSC$obj_track)~c(0:(Num_iter+1)), cex=1, pch=i, type = 'l', col = 7)
+legend('bottomleft', col=1:length(result_SC), lty=1, inset=0.01, lgd)
+#dev.off()
+```
+
+```{r fig.cap = 'Trace'}
+#pdf('strongly convex ill-conditioned-trace-s-0.5.pdf', width=8, height=6)
+#pdf('strongly convex well-conditioned-trace-s-0.1.pdf', width=8, height=6)
+for(i in 1:length(result_SC)){
+  if(i == 1){
+    plot(result_SC[[1]]$x_track[,2]~result_SC[[1]]$x_track[,1], cex= 0.5, pch=i, type = 'o', ylab = '', xlab = '', col = i)
+    title(ylab = TeX('$x_2$'), xlab=TeX('$x_1$'), line = 2.5)
+  }else{
+    points(result_SC[[i]]$x_track[,2]~result_SC[[i]]$x_track[,1], cex= 0.5, pch=i, type = 'o', col = i)
+  }
+}
+legend('topleft', col=1:length(result_SC), lty=1, inset=0.01, pch=1:6, lgd, bg='white')
+#dev.off()
+```
+
+```{r fig.cap = 'Trace zoomed in'}
+#pdf('strongly convex ill-conditioned-trace-zoomed.pdf', width=8, height=6)
+#pdf('strongly convex well-conditioned-trace-zoomed.pdf', width=8, height=6)
+for(i in 1:length(result_SC)){
+  if(i == 1){
+    plot(result_SC[[1]]$x_track[,2]~result_SC[[1]]$x_track[,1], cex= 0.5, pch=i, type = 'o', ylab = '', xlab = '', col = i, xlim=c(-0.2, 0.2))
+    title(ylab = TeX('$x_2$'), xlab = TeX('$x_1$'), line = 2.5)
+  }else{
+    points(result_SC[[i]]$x_track[,2]~result_SC[[i]]$x_track[,1], cex= 0.5, pch=i, type = 'o', col = i)
+  }
+}
+legend('bottomleft', col=1:length(result_SC), lty=1, inset=0.01, pch=1:6, lgd, bg='white')
+#dev.off()
+```
+
+
+# Log-sum-exp
+Set parameters in the objective function
+
+```{r}
+set.seed(111)
+A <- matrix(rnorm(50*200),ncol=200)
+b <- rnorm(200)
+```
+
+```{r}
+idx <- 3
+s <- 1
+x0 <- rep(0, 50)
+```
+
+```{r}
+Num_iter <- 2000
+r.vec <- c(2)
+beta.vec <- seq(0, 3, by=0.5)
+result_C <- list()
+i <- 1
+for(r in r.vec){
+  for(beta in beta.vec){
+    result_C[[i]] <- list()
+    result_C[[i]]$stepsize <- s
+    result_C[[i]]$r <- r
+    result_C[[i]]$beta <- beta
+    temp <- extC(idx = idx, x0 = x0, s = s, r = r, beta = beta, MaxIter = Num_iter)
+    result_C[[i]]$x <- temp$x
+    result_C[[i]]$obj_track <- temp$obj_track
+    result_C[[i]]$gradSq_track <- temp$gradSq_track
+    i <- i + 1
+  }
+}
+## plot legend
+lgd <- list() 
+i <- 1
+for(r in r.vec){
+  for(beta in beta.vec){
+    #lgd[[i]] <- bquote(r == .(r) ~ ", " ~ beta[2] == .(beta))
+    lgd[[i]] <- bquote(r == .(r) ~ ", " ~ tilde(c)[2] == .(beta))
+    i <- i + 1
+  }
+}
+lgd <- do.call(expression, lgd)
+```
+
+Extract minimal obj values as the global minimum.
+
+```{r}
+gradSq.vec <- obj.opm.vec <- 1:length(result_C)
+for (i in 1:length(result_C)) {
+  obj.opm.vec[i] <- result_C[[i]]$obj_track[length(result_C[[i]]$obj_track)]
+  gradSq.vec[i] <- result_C[[i]]$gradSq_track[length(result_C[[i]]$gradSq_track)]
+}
+#idx.opm <- which.min(obj.opm.vec)
+idx.opm <- which.min(gradSq.vec)
+minimal_logsumexp <- list()
+minimal_logsumexp$x_opm <- result_C[[idx.opm]]$x
+minimal_logsumexp$obj_opm <- oracle(3, minimal_logsumexp$x_opm)$obj
+minimal_logsumexp$grad_opm <- oracle(3, minimal_logsumexp$x_opm)$grad
+minimal_logsumexp$gradSq <- sum(minimal_logsumexp$grad_opm^2)
+```
+
+Visualization
+
+```{r fig.cap = 'Optimality gap'}
+#pdf('Convex logsumexp-objective-s-5.pdf', width=8, height=6)
+pdf('demo-c.pdf', width=8, height=6)
+par(mar=c(5.1, 4.5, 4.1, 2.1))
+for(i in 1:length(result_C)){
+  if(i == 1){
+    plot(log10(result_C[[i]]$obj_track-c(minimal_logsumexp$obj_opm))~c(0:(Num_iter+1)), ylab = '', xlab = '', cex=1, pch=i, type='l', col=i, ylim=c(-14, 0.5), yaxt="n")
+    title(ylab = TeX('$f(x_k)-f^*$'), line = 3)
+    title(xlab = paste('Iteration ', TeX('$k$')), line = 2.5)
+    aty <- axTicks(2)
+    labels <- sapply(aty,function(i)
+      as.expression(bquote(10^ .(i)))
+    )
+    axis(2,las = 2,at=aty,labels=labels)
+  }else{
+    points(log10(result_C[[i]]$obj_track-c(minimal_logsumexp$obj_opm))~c(0:(Num_iter+1)), cex=1, pch=i, type = 'l', col = i)
+  }
+}
+legend('topright', col=1:length(result_C), lty=1, inset=0.01, lgd)   
+dev.off()
+```
+
+```{r fig.cap = 'Rescaled optimality gap'}
+#pdf('Convex logsumexp-rescaled objective-s-0.5.pdf', width=8, height=6)
+par(mar=c(5.1, 4.5, 4.1, 2.1))
+for(i in 1:length(result_C)){
+  if(i == 1){
+    plot(log10(s*c(1:(Num_iter+1))^2*(result_C[[i]]$obj_track-c(minimal_logsumexp$obj_opm))[-1])~c(1:(Num_iter+1)), ylab = '', xlab = '', cex=1, pch=i, type='l', col=i, ylim = c(-8,2), yaxt="n")
+    title(ylab = TeX('$sk^2(f(x_k)-f^*)$'), line = 3)
+    title(xlab = paste('Iteration ', TeX('$k$')), line = 2.5)
+    aty <- axTicks(2)
+    labels <- sapply(aty,function(i)
+      as.expression(bquote(10^ .(i)))
+    )
+    axis(2,las = 2,at=aty,labels=labels)
+  }else{
+    points(log10(s*c(1:(Num_iter+1))^2*(result_C[[i]]$obj_track-c(minimal_logsumexp$obj_opm))[-1])~c(1:(Num_iter+1)), cex=1, pch=i, type = 'l', col = i)
+  }
+}
+legend('topright', col=1:length(result_C), lty=1, inset=0.01, lgd) 
+#dev.off()
+```
+
+```{r fig.cap = 'Min squared gradient'}
+#pdf('Convex logsumexp-min_gradSq.pdf', width=8, height=6)
+par(mar=c(5.1, 4.5, 4.1, 2.1))
+for(i in 1:length(result_C)){
+  if(i == 1){
+    plot(log10(cummin(result_C[[i]]$gradSq_track))~c(0:(Num_iter+1)), ylab = '', xlab = '', cex=1, pch=i, type='l', col=i, ylim=c(-30,0), yaxt="n")
+    title(ylab = TeX('$\\min_{0\\leq i \\leq k}\\|f(x_i)\\|^2$'), line = 2.5)
+    title(xlab = paste('Iteration ', TeX('$k$')), line = 2.5)
+    aty <- axTicks(2)
+    labels <- sapply(aty,function(i)
+      as.expression(bquote(10^ .(i)))
+    )
+    axis(2,las = 2,at=aty,labels=labels)
+  }else{
+    points(log10(cummin(result_C[[i]]$gradSq_track))~c(0:(Num_iter+1)), cex=1, pch=i, type = 'l', col = i)
+  }
+}
+legend('topright', col=1:length(result_C), lty=1, inset=0.01, lgd) 
+#dev.off()
+```
+
+
+```{r fig.cap = 'Rescaled min squared gradient'}
+#pdf('Convex logsumexp-rescaled min_gradSq-s-0.5.pdf', width=8, height=6)
+par(mar=c(5.1, 4.5, 4.1, 2.1))
+for(i in 1:length(result_C)){
+  if(i == 1){
+    plot(log10(s^2*(c(0:(Num_iter+1)))^3*cummin(result_C[[i]]$gradSq_track))~c(0:(Num_iter+1)), ylab = '', xlab = '', cex=1, pch=i, type='l', col=i, ylim = c(-7, 4), yaxt="n")
+    title(ylab = TeX('$s^2(k+1)^3\\min_{0\\leq i \\leq k}\\|f(x_i)\\|^2$'), line = 2.5)
+    title(xlab = paste('Iteration ', TeX('$k$')), line = 2.5)
+    aty <- axTicks(2)
+    labels <- sapply(aty,function(i)
+      as.expression(bquote(10^ .(i)))
+    )
+    axis(2,las = 2,at=aty,labels=labels)
+  }else{
+    points(log10(s^2*(c(0:(Num_iter+1)))^3*cummin(result_C[[i]]$gradSq_track))~c(0:(Num_iter+1)), cex=1, pch=i, type = 'l', col = i)
+  }
+}
+legend('topright', col=1:length(result_C), lty=1, inset=0.01, lgd)
+#dev.off()
+```
+
+
+# Quadratic
+Set parameters in the objective function
+
+```{r}
+set.seed(123)
+T <- matrix(runif(500*500), ncol=500)
+A <- t(T)%*%T
+b <- runif(500)
+A_eigen <- eigen(A)$value
+A_norm <- A_eigen[1]
+```
+
+Calculate the minimizer
+
+```{r}
+minimal_quadratic <- list()
+minimal_quadratic$x_opm <- solve(A,-b)
+minimal_quadratic$obj_opm <- oracle(idx=2,x=minimal_quadratic$x_opm)$obj
+minimal_quadratic$grad_opm <- A%*%minimal_quadratic$x_opm + b
+minimal_quadratic$gradSq <- sum((minimal_quadratic$grad_opm)^2)
+```
+
+Step size and x0
+
+```{r}
+idx <- 2
+s <- 0.05/A_norm
+set.seed(666)
+x0 <- minimal_quadratic$x_opm + rnorm(500, 0, 0.01)
+#sqrt(sum((x0-minimal_quadratic$x_opm)^2))
+Num_iter <- 3000
+#result_GD <- GD(idx = idx, x0 = x0, s = s, MaxIter = Num_iter)
+#plot(result_GD$obj_track~c(0:Num_iter), cex=0.1)
+```
+
+Run algorithms
+
+```{r}
+r.vec <- c(1,2)
+beta.vec <- c(0,0.5,1)
+i <- 1
+result_C <- list()
+for(r in r.vec){
+  for(beta in beta.vec){
+    result_C[[i]] <- list()
+    result_C[[i]]$stepsize <- s
+    result_C[[i]]$r <- r
+    result_C[[i]]$beta <- beta
+    temp <- extC(idx = idx, x0 = x0, s = s, r = r, beta = beta, MaxIter = Num_iter)
+    result_C[[i]]$x <- temp$x
+    result_C[[i]]$obj_track <- temp$obj_track
+    result_C[[i]]$gradSq_track <- temp$gradSq_track
+    i <- i + 1
+  }
+}
+## plot legend
+lgd <- list() 
+i <- 1
+for(r in r.vec){
+  for(beta in beta.vec){
+    lgd[[i]] <- bquote(r == .(r) ~ ", " ~ beta[2] == .(beta))
+    i <- i + 1
+  }
+}
+lgd <- do.call(expression, lgd)
+```
+
+Visualization 
+
+```{r fig.cap = 'Objective gap'}
+#pdf('Convex quadratic-objective.pdf', width=8, height=6)
+#par(mar=c(5.1, 4.5, 4.1, 2.1))
+for(i in 1:length(result_C)){
+  if(i == 1){
+    plot(log10(result_C[[i]]$obj_track-c(minimal_quadratic$obj_opm))~c(0:(Num_iter+1)), ylab = '', xlab = '', cex=1, pch=i, type='l', col=i, ylim = c(-4.5,1), yaxt="n")
+    title(ylab = TeX('$f(x_k)-f^*$'), line = 2.5)
+    title(xlab = paste('Iteration ', TeX('$k$')), line = 2.5)
+    aty <- axTicks(2)
+    labels <- sapply(aty,function(i)
+      as.expression(bquote(10^ .(i)))
+    )
+    axis(2,las = 2,at=aty,labels=labels)
+  }else{
+    points(log10(result_C[[i]]$obj_track-c(minimal_quadratic$obj_opm))~c(0:(Num_iter+1)), cex=1, pch=i, type = 'l', col = i)
+  }
+}
+legend('topright', col=1:length(result_C), lty=1, inset=0.01, lgd)  
+#dev.off()
+```
+
+```{r fig.cap = 'Rescaled objective gap'}
+#pdf('Convex quadratic-rescaled objective-s-0.3Anorm-inv.pdf', width=8, height=6)
+par(mar=c(5.1, 4.5, 4.1, 2.1))
+for(i in 1:length(result_C)){
+  if(i == 1){
+    plot(log10(s*c(1:(Num_iter+1))^2*(result_C[[i]]$obj_track-c(minimal_quadratic$obj_opm))[-1])~c(1:(Num_iter+1)), 
+         ylab = '', 
+         xlab = '', 
+         ylim = c(-5.5, -1.5),
+         cex=1, pch=i, type='l', col=i, yaxt='n')
+    title(ylab = TeX('$sk^2(f(x_k)-f^*)$'),  line = 3)
+    title(xlab = paste('Iteration ', TeX('$k$')), line = 2.5)
+    aty <- axTicks(2)
+    labels <- sapply(aty,function(i)
+      as.expression(bquote(10^ .(i)))
+    )
+    axis(2,las = 2,at=aty,labels=labels)
+  }else{
+    points(log10(s*c(1:(Num_iter+1))^2*(result_C[[i]]$obj_track-c(minimal_quadratic$obj_opm))[-1])~c(1:(Num_iter+1)), 
+           cex=1, pch=i, type = 'l', col = i)
+  }
+}
+legend('bottomright', col=1:length(result_C), lty=1, inset=0.01, lgd, bg='white')
+#dev.off()
+```
+
+```{r fig.cap = 'Rescaled min squared gradient'}
+#pdf('Convex quadratic-rescaled min_gradientSq-s-0.05Anorm-inv.pdf.pdf', width=8, height=6)
+par(mar=c(5.1, 4.5, 4.1, 2.1))
+for(i in 1:1:length(result_C)){
+  if(i == 1){
+    plot(log10(s^2*(c(0:(Num_iter+1))+1)^3*cummin(result_C[[i]]$gradSq_track))~c(0:(Num_iter+1)), ylab = '', xlab = '', cex=1, pch=i, type='l', col=i, yaxt="n", ylim = c(-6.3,-2))
+    title(ylab = TeX('$s^2(k+1)^3\\min_{0\\leq i \\leq k}\\|f(x_i)\\|^2$'), line = 2.5)
+    title(xlab = paste('Iteration ', TeX('$k$')), line = 2.5)
+    aty <- axTicks(2)
+    labels <- sapply(aty,function(i)
+      as.expression(bquote(10^ .(i)))
+    )
+    axis(2,las = 2,at=aty,labels=labels)
+  }else{
+    points(log10(s^2*(c(0:(Num_iter+1))+1)^3*cummin(result_C[[i]]$gradSq_track))~c(0:(Num_iter+1)), cex=1, pch=i, type = 'l', col = i)
+  }
+}
+legend('bottomright', col=1:length(result_C), lty=1, inset=0.01, lgd, bg='white')
+#dev.off()
+```
